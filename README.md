@@ -8,10 +8,12 @@ Install and activate a C/C++ compiler toolchain (GCC, Clang, or MSVC) on GitHub-
 - Configures MSVC build environment on Windows with selectable `arch`
 - Sets up Ninja on all platforms
 - Emits `c_compiler` and `cxx_compiler` outputs for downstream jobs
+ - Optional installation of Doxygen + Graphviz for documentation generation (Linux)
 
 ## Inputs
 - `compiler` (required): One of `gcc`, `clang`, `msvc`
 - `arch` (optional, Windows/MSVC only): Target architecture. Default: `x64`
+ - `docs` (optional, Linux only): When `true`, installs `doxygen` and `graphviz`. Default: `false`
 
 ## Environment variables
 - `GCC_VERSION`: GCC major version to install (e.g., `14`). Default: `14`
@@ -75,6 +77,25 @@ jobs:
           echo "CXX: ${{ steps.tool.outputs.cxx_compiler }}"
 ```
 
+### GCC with documentation tools (Doxygen + Graphviz)
+```yaml
+jobs:
+  build-docs:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install GCC + docs tooling
+        id: tool
+        uses: StormBytePP/install-toolchain@master
+        with:
+          compiler: gcc
+          docs: true
+      - name: Verify tools
+        run: |
+          doxygen --version
+          dot -V || true
+```
+
 ### MSVC on Windows
 ```yaml
 jobs:
@@ -115,6 +136,7 @@ To reliably consume the action outputs, set an `id` on the step and read from `s
 - On Windows, MSVC environment setup is performed via `ilammy/msvc-dev-cmd@v1` using the requested `arch`.
 - Ninja is set up via `ashutoshvarma/setup-ninja@master` for faster CMake builds.
 - The action validates `compiler` and fails fast on unsupported values.
+ - Documentation tools (`doxygen`, `graphviz`) are only installed on Linux when `docs: true`.
 
 ## Troubleshooting
 - If `apt` fails, ensure the runner image supports the requested versions.

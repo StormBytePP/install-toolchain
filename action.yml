@@ -16,6 +16,10 @@ inputs:
     description: 'Architecture for MSVC (e.g., x64, x86, arm64) - only used when compiler=msvc'
     required: false
     default: 'x64'
+  docs:
+    description: 'Install Doxygen and Graphviz (Linux only)'
+    required: false
+    default: 'false'
 outputs:
   c_compiler:
     description: 'Path to C compiler selected.'
@@ -52,6 +56,10 @@ runs:
       if: runner.os == 'Linux'
       shell: bash
       run: sudo apt install -y cmake
+    - name: Install documentation tools (Linux)
+      if: runner.os == 'Linux' && inputs.docs == 'true'
+      shell: bash
+      run: sudo apt install -y doxygen graphviz
     # Linux: GCC toolchain
     - name: Install GCC toolchain
       if: runner.os == 'Linux' && inputs.compiler == 'gcc'
