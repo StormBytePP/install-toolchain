@@ -1,0 +1,103 @@
+name: 'Install Compiler'
+description: 'Install and activate requested C/C++ compiler toolchain (gcc, clang, or msvc) on Linux/Windows runner.'
+author: 'StormBytePP'
+branding:
+  icon: 'cpu'
+  color: 'green'
+env:
+  GCC_VERSION: '14'
+  CLANG_VERSION: '20'
+  INSTALL_EXTRAS: 'true'
+inputs:
+  compiler:
+    description: 'Compiler to install: gcc, clang, or msvc'
+    required: true
+  arch:
+    description: 'Architecture for MSVC (e.g., x64, x86, arm64) - only used when compiler=msvc'
+    required: false
+    default: 'x64'
+outputs:
+  c_compiler:
+    description: 'Path to C compiler selected.'
+    value: ${{ steps.set-outputs.outputs.c_compiler }}
+  cxx_compiler:
+    description: 'Path to C++ compiler selected.'
+    value: ${{ steps.set-outputs.outputs.cxx_compiler }}
+runs:
+  using: 'composite'
+  steps:
+    # Tools common to all platforms
+    - name: Set up ninja
+      uses: ashutoshvarma/setup-ninja@master
+    # Windows: MSVC (Visual C++) environment
+    - name: Configure Windows environment
+      if: runner.os == 'Windows' && inputs.compiler == 'msvc'
+      uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: ${{ inputs.arch }}
+    # Validate requested compiler
+    - name: Validate inputs
+      shell: bash
+      run: |
+        set -euo pipefail
+        if [[ "${{ inputs.compiler }}" != "gcc" && "${{ inputs.compiler }}" != "clang" && "${{ inputs.compiler }}" != "msvc" ]]; then
+          echo "Unsupported compiler '${{ inputs.compiler }}'" >&2; exit 1; fi
+        echo "Compiler: ${{ inputs.compiler }}"
+    # Linux: package manager prep and CMake
+    - name: Update APT cache (Linux only)
+      if: runner.os == 'Linux'
+      shell: bash
+      run: sudo apt update
+    - name: Install CMake (Linux)
+      if: runner.os == 'Linux'
+      shell: bash
+      run: sudo apt install -y cmake
+    # Linux: GCC toolchain
+    - name: Install GCC toolchain
+      if: runner.os == 'Linux' && inputs.compiler == 'gcc'
+      shell: bash
+      run: |
+        set -euo pipefail
+        ver="${{ env.GCC_VERSION }}"
+        if [[ -z "$ver" ]]; then ver="14"; fi
+        sudo apt install -y gcc-${ver} g++-${ver}
+        sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-${ver} 100
+        sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-${ver} 100
+        sudo update-alternatives --set gcc /usr/bin/gcc-${ver}
+        sudo update-alternatives --set g++ /usr/bin/g++-${ver}
+        gcc --version | head -n1
+        g++ --version | head -n1
+    # Linux: Clang + libc++ toolchain (optional extras)
+    - name: Install Clang toolchain
+      if: runner.os == 'Linux' && inputs.compiler == 'clang'
+      shell: bash
+      run: |
+        set -euo pipefail
+        ver="${{ env.CLANG_VERSION }}"
+        if [[ -z "$ver" ]]; then ver="20"; fi
+        extras_flag="${{ env.INSTALL_EXTRAS }}"
+        pkgs=("clang-${ver}" "libc++-${ver}-dev" "libc++abi-${ver}-dev")
+        if [[ "$extras_flag" == "true" ]]; then
+          pkgs+=("clang-format-${ver}" "clang-tidy-${ver}")
+        fi
+        sudo apt install -y "${pkgs[@]}"
+        sudo update-alternatives --remove-all clang || true
+        sudo update-alternatives --remove-all clang++ || true
+        sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-${ver} 210 --slave /usr/bin/clang++ clang++ /usr/bin/clang++-${ver}
+        clang --version | head -n1
+        clang++ --version | head -n1
+    # Outputs: selected compiler paths
+    - name: Set outputs
+      id: set-outputs
+      shell: bash
+      run: |
+        if [[ "${{ inputs.compiler }}" == "gcc" ]]; then
+          echo "c_compiler=/usr/bin/gcc" >> "$GITHUB_OUTPUT"
+          echo "cxx_compiler=/usr/bin/g++" >> "$GITHUB_OUTPUT"
+        elif [[ "${{ inputs.compiler }}" == "clang" ]]; then
+          echo "c_compiler=/usr/bin/clang" >> "$GITHUB_OUTPUT"
+          echo "cxx_compiler=/usr/bin/clang++" >> "$GITHUB_OUTPUT"
+        else
+          echo "c_compiler=cl" >> "$GITHUB_OUTPUT"
+          echo "cxx_compiler=cl" >> "$GITHUB_OUTPUT"
+        fi
